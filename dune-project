@@ -1,3 +1,3 @@
 (lang dune 2.0)
-(name current)
+(name current_incr)
 (formatting disabled)
