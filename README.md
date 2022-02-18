@@ -23,9 +23,9 @@ Use `opam install current_incr` to install the library.
 ```ocaml
 # #require "current_incr";;
 
-# let total = Current_incr.var 10
+# let total = Current_incr.var 10;;
 val total : int Current_incr.var = <abstr>
-# let complete = Current_incr.var 5
+# let complete = Current_incr.var 5;;
 val complete : int Current_incr.var = <abstr>
 
 # let status =
@@ -38,7 +38,7 @@ val complete : int Current_incr.var = <abstr>
         Printf.sprintf "%d/%d jobs complete (%.1f%%)"
                        complete total (100. *. frac)
         |> Current_incr.write
-    end
+    end;;
 val status : string Current_incr.t = <abstr>
 ```
 
@@ -59,11 +59,11 @@ After changing them, you must call `propagate` to update the results:
 - : unit = ()
 # Current_incr.change complete 4;;
 - : unit = ()
-# print_endline @@ Current_incr.observe status;;      (* Not yet updated *)
+# print_endline @@ Current_incr.observe status;;      (* Not yet updated *);;
 5/10 jobs complete (50.0%)
 - : unit = ()
 
-# Current_incr.propagate ();
+# Current_incr.propagate ();;;
 - : unit = ()
 # print_endline @@ Current_incr.observe status;;
 4/12 jobs complete (33.3%)
@@ -86,9 +86,9 @@ It can be used like this:
 PUBLISH: 4/12 jobs complete (33.3%)
 val display : unit Current_incr.t = <abstr>
 
-# Current_incr.change total 0;
+# Current_incr.change total 0;;;
 - : unit = ()
-# Current_incr.propagate ()
+# Current_incr.propagate ();;
 RETRACT: 4/12 jobs complete (33.3%)
 PUBLISH: No jobs
 - : unit = ()
