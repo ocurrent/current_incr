@@ -135,7 +135,37 @@ let test_leak () =
   done;
   let h1 = heap () in
   Alcotest.(check int) "Memory usage constant" 0 @@ h1 - h0;
-  change x 0    (* Stop [x] from being GC'd before here *)
+  change x 0;   (* Stop [x] from being GC'd before here *)
+  propagate ()
+
+(* We stop reading from [y] by toggling [x].
+ * Memory leaks because [y] keeps a queue of its forgotten readers. *)
+let test_leak_readers () =
+  let size = 100 in
+  let x = var false in
+  let y = var 0 in
+  let _ = of_cc begin
+      read (of_var x) @@ fun x ->
+      if x
+      then write (Array.init size (fun _ -> of_cc (read (of_var y) write)))
+      else write [| |]
+    end
+  in
+  let h0 = heap () in
+  change x true;
+  propagate ();
+  let h1 = heap () in
+  Alcotest.(check bool) "Memory usage increased" true (h1 > h0);
+  change x false;
+  propagate ();
+  let h2 = heap () in
+  Alcotest.(check int) "Only reclaimed the array" (size + 1) (h1 - h2);
+  Alcotest.(check bool) "Memory leak" true (h2 > h0);
+  change y 1;     (* Bug: requires a write to clear the readers *)
+  let h3 = heap () in
+  Alcotest.(check int) "Memory usage constant" 0 @@ h3 - h0;
+  change x true;  (* Stop [x] from being GC'd before here *)
+  propagate ()
 
 module String_map = Map.Make(String)
 module Separate_strings = Current_incr.Separate(String_map)
@@ -219,7 +249,10 @@ let () =
       Alcotest.test_case  "eq"       `Quick test_eq;
       Alcotest.test_case  "expand"   `Quick test_expand;
       Alcotest.test_case  "nested"   `Quick test_nested;
-      Alcotest.test_case  "leak"     `Quick test_leak;
       Alcotest.test_case  "separate" `Quick test_separate;
-    ]
+    ];
+    "leak", [
+      Alcotest.test_case  "no change" `Quick test_leak;
+      Alcotest.test_case  "readers"   `Quick test_leak_readers;
+    ];
   ]
