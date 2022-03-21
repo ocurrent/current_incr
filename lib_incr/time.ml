@@ -5,6 +5,7 @@ type t = {
   mutable tag: int;
   mutable prev: t;
   mutable next: t;
+  depth : int;
   counter: int ref;
   mutable on_forget: (unit -> unit) option;
 }
@@ -12,8 +13,10 @@ type t = {
 let average x y = (x land y) + (x lxor y) / 2
 
 let curr_index t = t.tag
+let depth t = t.depth
 
-let rec sentinel = { tag = 0; prev = sentinel; next = sentinel; counter = ref 0; on_forget = None }
+let rec sentinel =
+  { tag = 0; prev = sentinel; next = sentinel; depth = (-1); counter = ref 0; on_forget = None }
 
 let is_first t = t.prev == t
 let is_last  t = t == t.next
@@ -36,7 +39,7 @@ let consistent _ = ()
 let consistents _ _ = ()
 
 let root () =
-  let rec t = { prev = t; next = t; tag = 0; counter = ref 1; on_forget = None } in
+  let rec t = { prev = t; next = t; tag = 0; depth = (-1); counter = ref 1; on_forget = None } in
   consistent t;
   t
 
@@ -140,10 +143,10 @@ let relabel node =
     relabel_span_big root step (tag + step) count;
   consistents root count
 
-let after ?on_forget t =
+let after ?on_forget ~depth t =
   assert (is_valid t);
   let tag = average (curr_index t) (next_index t) in
-  let t' = {prev = t; next = t; tag; counter = t.counter; on_forget} in
+  let t' = {prev = t; next = t; tag; depth; counter = t.counter; on_forget} in
   let {next; counter; _} = t in
   if t == next then
     t'.next <- t'
@@ -159,19 +162,19 @@ let after ?on_forget t =
   consistent t';
   t'
 
-let splice_out ts te =
-  if ts == te then ()
-  else (
-    assert (compare ts te < 0);
-    let rec aux t =
-      if t != te then (
-        let next = t.next in
-        forget t;
-        aux next
-      )
-    in
-    aux ts.next
-  )
+let splice ~depth t =
+  let rec aux t =
+    if t.depth > depth then (
+      let next = t.next in
+      forget t;
+      aux next
+    )
+  in
+  aux t
+
+let splice_out t =
+  assert (is_valid t);
+  splice ~depth:t.depth t.next
 
 let set_forget t fn =
   assert (is_valid t);

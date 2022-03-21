@@ -9,7 +9,6 @@ let in_propagate = ref false
 (* A record of a computation that takes an input of type ['a]. *)
 type 'a edge = {
   start : Time.t;               (* When this computation started. *)
-  stop : Time.t;                (* When it produced its result. *)
   fn : 'a -> unit;              (* The operation to run on updates. *)
 }
 
@@ -69,12 +68,25 @@ end
 (* The singleton propagation queue. This contains all edges that need to be recalculated. *)
 let q = Pq.create ()
 
-let now = ref (Time.root ())
+(* The very first and last entry in the timeline. *)
+let root_start = Time.root ()
+let root_stop  = Time.after ~depth:(Time.depth root_start) root_start
 
-(* Insert a new time directly after [now]. *)
+let now = ref root_start
+
+let depth = ref 0  (* Number of [read] currently open surrounding [now]. *)
+
+(* Insert a new time directly after [now] at the current [depth]. *)
 let insert_now ?on_forget () =
-  now := Time.after ?on_forget !now;
+  now := Time.after ?on_forget ~depth:!depth !now;
   !now
+
+let read_start () =
+  let start = insert_now () in
+  incr depth;
+  start
+
+let read_stop () = decr depth
 
 let create init =
   let t = ref Uninitialised in
@@ -98,11 +110,11 @@ let minor_tidy q =
 
 let read t fn =
   let value = (non_empty t).value in
-  let start = insert_now () in
+  let start = read_start () in
   fn value;
-  let stop = insert_now () in
+  read_stop ();
   let readers = (non_empty t).readers in         (* Readers might have changed by now *)
-  let edge = { start; stop; fn } in
+  let edge = { start; fn } in
   minor_tidy readers;
   Queue.add edge readers;
   t := Full { value; readers }
@@ -145,30 +157,28 @@ module Separate (Map : Map.S) = struct
      will add all readers to the queue but the final result will be set before
      any of them actually run. *)
 
-  (* The time period of a computation that processed an element of the set.
+  (* The start time of a computation that processed an element of the set.
      There is no [fn] here because an input element cannot change, it can only
-     be removed from the set. When an element is removed, times from [start] to
-     [stop] (both inclusive) are erased from history. *)
-  type period = {
-    start : Time.t;               (* When this computation started. *)
-    stop : Time.t;                (* When it produced its result. *)
-  }
+     be removed from the set. When an element is removed, the [start] and
+     its children are erased from history. *)
+  type period = Time.t               (* When this computation started. *)
 
   let map xs_incr (f : Map.key -> 'b t -> changeable) : 'b Map.t t =
     let active : period Map.t ref = ref Map.empty in
     let result = create (fun d -> write ~eq:(==) d Map.empty) in
-    let start = insert_now () in        (* When we respond to changes in [xs_incr] and update [active]. *)
-    now := Time.after !now;             (* When [result] is written. *)
+    let start = read_start () in
     let update xs =
-      (* Called initially and whenever [xs] changes.
-         It runs instantaneously at time [start]. *)
-      let saved = !now in
+      (* Called initially and whenever [xs] changes, always at time [start] and [depth + 1].
+         We exit the scope of [start] so that the Map elements are not spliced out
+         after an update of the set. *)
+      read_stop ();
+      assert (!now == start);
+      assert (!depth = Time.depth start);
       active := Map.merge (fun key a b ->
           match a, b with
           | None, Some () ->
             (* A new element has been added. Add it to the timeline: *)
-            let start = Time.after start in
-            now := start;
+            let start = read_start () in
             (* Run [f key]. When it tries to write the result, add that to [results]: *)
             f key (ref (Redirect (fun ~eq value ->
                 let old_map = (non_empty result).value in
@@ -176,23 +186,23 @@ module Separate (Map : Map.S) = struct
                 | Some old_value when eq old_value value -> ()
                 | _ -> write result (Map.add key value old_map) ~eq:(==);
               )));
-            let stop = !now in
+            read_stop ();
             (* Record the time period during which [f key] ran, so we can erase it later. *)
-            Some { start; stop }
+            Some start
           | Some _ as existing, Some () ->
             (* An existing element is still present. Keep it. *)
             existing
-          | Some old, None ->
+          | Some old_start, None ->
             (* An element has been removed. Erase it from history: *)
-            Time.splice_out (Time.prev old.start) (Time.next old.stop);
+            Time.splice_out old_start;
+            Time.forget old_start;
             (* Remove its result from the output: *)
             let old_map = (non_empty result).value in
             write result (Map.remove key old_map) ~eq:(==);
             (* Remove it from [active]: *)
             None
           | None, None -> assert false
-        ) !active xs;
-      now := saved;
+        ) !active xs
     in
     begin
       let xs = non_empty xs_incr in
@@ -201,7 +211,7 @@ module Separate (Map : Map.S) = struct
       (* Note: [xs] might have been replaced by now. *)
     end;
     (* Arrange to call [update] again if [xs] changes: *)
-    let edge = { start; stop = start; fn = update } in
+    let edge = { start; fn = update } in
     Queue.add edge (non_empty xs_incr).readers;
     result
 end
@@ -217,20 +227,22 @@ let change ~eq t v =
 let rec propagate2 () =
   match Pq.pop q with
   | None -> ()
-  | Some { start; stop; fn } ->
+  | Some { start; fn } ->
     (* Note: The later paper splices out after calling [fn] rather than before - why? *)
-    Time.splice_out start stop;
+    Time.splice_out start;
     (* They also added a [finger] variable - but never use it. *)
     now := start;
+    depth := Time.depth start + 1;  (* Inside the read. *)
     fn ();
     propagate2 ()
 
 let propagate () =
   assert (not !in_propagate);
-  let ctime = !now in
   in_propagate := true;
   Fun.protect propagate2
     ~finally:(fun () ->
-        now := ctime;
+        (* Set the current time after all created elements. *)
+        now := Time.prev root_stop;
+        depth := 0;
         in_propagate := false
       )
