@@ -9,11 +9,15 @@ type t
 (** Create a new ordering with a single element. O(1) *)
 val root : unit -> t
 
-(** [after t] inserts a new element to the ordering, greater than [t] but
+(** [after ~depth t] inserts a new element to the ordering, greater than [t] but
     less than all existing elements greater than [t].
 
+    The [depth] is used by [splice_out] to determine if the created element is
+    a child of [t]. The children of [t] are all the elements directly following
+    [t] and having a larger [depth] than it.
+
     O(1) amortized. *)
-val after  : ?on_forget:(unit -> unit) -> t -> t
+val after  : ?on_forget:(unit -> unit) -> depth:int -> t -> t
 
 (** Check if two elements belong to the same order. O(1) *)
 val same_order : t -> t -> bool
@@ -34,9 +38,9 @@ val forget : t -> unit
     You can check if it is the case with [is_valid]. *)
 val is_valid : t -> bool
 
-(** [splice_out ts te] forgets all times between [ts] and [te], so that
-    afterwards [te] immediately follows [ts]. *)
-val splice_out : t -> t -> unit
+(** [splice_out t] forgets all times immediately following and having a larger
+    depth than [t]. *)
+val splice_out : t -> unit
 
 val set_forget : t -> (unit -> unit) -> unit
 (** [set_forget t fn] sets [t]'s forget function to [fn].
@@ -51,6 +55,9 @@ val next : t -> t
 
 val prev : t -> t
 (** [prev t] is the time immediately before [t] (which must not be the first time). *)
+
+val depth : t -> int
+(** [depth t] is the depth of [t]. *)
 
 (* Algorithm due to:
    Two Simplified Algorithms for Maintaining Order in a List
