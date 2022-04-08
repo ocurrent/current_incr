@@ -159,12 +159,8 @@ let test_leak_readers () =
   change x false;
   propagate ();
   let h2 = heap () in
-  Alcotest.(check int) "Only reclaimed the array" (size + 1) (h1 - h2);
-  Alcotest.(check bool) "Memory leak" true (h2 > h0);
-  change y 1;     (* Bug: requires a write to clear the readers *)
-  let h3 = heap () in
-  Alcotest.(check int) "Memory usage constant" 0 @@ h3 - h0;
-  change x true;  (* Stop [x] from being GC'd before here *)
+  Alcotest.(check int) "No memory leak" 0 @@ h2 - h0;
+  change x false; (* Stop [x] from being GC'd before here *)
   propagate ()
 
 module String_map = Map.Make(String)
