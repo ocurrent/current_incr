@@ -1,7 +1,7 @@
 (** The low-level modifiable interface.
     [Current_incr] provides a similar but safer wrapper around this. *)
 
-type 'a t
+type !'a t
 (** A modifiable value. *)
 
 type changeable
