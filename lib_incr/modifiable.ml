@@ -51,17 +51,17 @@ end = struct
     ref Edge_set.empty
 
   let add t edge =
-    if Time.is_valid edge.start then (
-      t := Edge_set.add edge !t;
-      Time.set_forget edge.start (fun () -> t := Edge_set.remove edge !t)
-    )
+    assert (Time.is_valid edge.start);
+    t := Edge_set.add edge !t;
+    Time.clear_forget edge.start;  (* No need to remove from the [readers] queue anymore. *)
+    Time.set_forget edge.start (fun () -> t := Edge_set.remove edge !t)
 
   let pop t =
     match Edge_set.min_elt_opt !t with
     | None -> None
     | Some edge ->
       t := Edge_set.remove edge !t;
-      Time.clear_forget edge.start;
+      Time.clear_forget edge.start;  (* No need to remove from [Edge_set] anymore. *)
       Some edge
 end
 
@@ -99,14 +99,9 @@ let non_empty (t:'a t) =
   | Uninitialised -> failwith "Modifiable is empty! (this shouldn't happen)"
   | Redirect _ -> failwith "Got an unexpected Redirect (this shouldn't happen)"
 
-(* If we keep reading a modifiable that doesn't change often, the list of
-   readers can build up over time. So each time we add something to the queue,
-   we also take one existing item and check that it's still valid. *)
-let minor_tidy q =
-  match Queue.take_opt q with
-  | None -> ()
-  | Some edge ->
-    if Time.is_valid edge.start then Queue.add edge q
+let add_reader edge readers =
+  let elt = Queue.add edge readers in
+  Time.set_forget edge.start (fun () -> Queue.remove elt)
 
 let read t fn =
   let value = (non_empty t).value in
@@ -115,9 +110,7 @@ let read t fn =
   read_stop ();
   let readers = (non_empty t).readers in         (* Readers might have changed by now *)
   let edge = { start; fn } in
-  minor_tidy readers;
-  Queue.add edge readers;
-  t := Full { value; readers }
+  add_reader edge readers
 
 let on_release fn =
   let _ : Time.t = insert_now ~on_forget:fn () in
@@ -129,8 +122,7 @@ let reread t reader () =
   | Uninitialised -> failwith "Modifiable is empty! (this shouldn't happen)"
   | Redirect _ -> failwith "Modifiable is a redirect! (this shouldn't happen)"
   | Full f ->
-    minor_tidy f.readers;
-    Queue.add reader f.readers;
+    add_reader reader f.readers;
     reader.fn f.value
 
 let write ~eq t value =
@@ -206,13 +198,12 @@ module Separate (Map : Map.S) = struct
     in
     begin
       let xs = non_empty xs_incr in
-      minor_tidy xs.readers;
       update xs.value
       (* Note: [xs] might have been replaced by now. *)
     end;
     (* Arrange to call [update] again if [xs] changes: *)
     let edge = { start; fn = update } in
-    Queue.add edge (non_empty xs_incr).readers;
+    add_reader edge (non_empty xs_incr).readers;
     result
 end
 
