@@ -1,4 +1,4 @@
-(* Generate random expressions containing sums, conditionnals and binds,
+(* Generate random expressions containing sums, conditionals and binds,
    then compare the results with a naive evaluation without SAC.
 
    The naive evaluations produce a [log] of all the [read] operations
@@ -200,6 +200,10 @@ end
 
 open Crowbar
 
+(* We want to generate a pair of functions: one will process a collection of plain values using Current_incr,
+   and the other will process tagged [Id] values (non-incrementally). They should both give equivalent
+   results, given equivalent inputs. *)
+
 (* Find all values of type [target] available in the typed stack. *)
 let all_values : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa -> a) * (sb -> b)) list
 = fun target typ_stack ->
@@ -215,6 +219,7 @@ let all_values : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa ->
   in
   go typ_stack
 
+(* All values, as well as their total (if the type is [Int] and there is more than one). *)
 let all_values : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa -> a) * (sb -> b)) list
 = fun target typ_stack ->
   let values = all_values target typ_stack in
@@ -226,10 +231,13 @@ let all_values : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa ->
   | _ ->
       values
 
+(* Wrap [all_values] results as crowbar generators. *)
 let all_values : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa -> a) * (sb -> b)) gen list
 = fun target typ_stack ->
   List.map const (all_values target typ_stack)
 
+(* A generator that chooses from [all_values] (if anything is available).
+   Logically, this returns an option, but it's convenient to use a list type. *)
 let gen_value : type a b sa sb. (a, b) Type.t -> (sa, sb) Type.stack -> ((sa -> a) * (sb -> b)) gen list
 = fun target typ_stack ->
   match all_values target typ_stack with
@@ -246,9 +254,9 @@ let rec gen_cc
 = fun target typ_stack ->
   lazy (
     choose (
-      [unlazy (gen_cc'' target typ_stack)]
-      @ all_values (Cc target) typ_stack
-      @ (gen_value target typ_stack
+      [unlazy (gen_cc'' target typ_stack)]      (* Generate a new value and then process it to get a [Cc target] *)
+      @ all_values (Cc target) typ_stack        (* Choose a [Cc target] from the stack *)
+      @ (gen_value target typ_stack             (* Choose a [target] from the stack and wrap it as a CC *)
          |> List.map (fun gen ->
               map [gen]
                 (fun (a, b) ->
@@ -263,8 +271,8 @@ and gen_cc'
 = fun target typ_stack ->
   lazy (
     choose (
-      [unlazy (gen_cc target typ_stack)]
-      @ (gen_value Int typ_stack
+      [unlazy (gen_cc target typ_stack)]       (* [gen_cc], as above *)
+      @ (gen_value Int typ_stack               (* if is_even c then a else b. *)
          |> List.map (fun gen ->
               map [gen; unlazy (gen_cc target typ_stack); unlazy (gen_cc target typ_stack)]
               (fun (cond_a, cond_b) (left_a, left_b) (right_a, right_b) ->
@@ -278,12 +286,15 @@ and gen_cc''
 = fun target typ_stack ->
   lazy (
     choose [
+      (* Generate an [int], add it to the stack, and run a CC on that stack.
+         We also generate a fresh Uid and log an action using it on the incremental version. *)
       map [unlazy (gen_t Int typ_stack); unlazy (gen_cc' target (Int :: typ_stack))]
         (fun (src_a, src_b) (body_a, body_b) ->
           let uid = Uid.fresh () in
           (fun s -> Patch.incr_read ~uid (src_a s) (fun v -> body_a (v, s))),
           (fun s -> Trace.read ~typ_stack ~s ~uid ~typ:Int (src_b s) (fun v -> body_b (v, s))));
 
+      (* Same, but generate an [int Incr.t] instead of a plain [int]: *)
       map [unlazy (gen_t (T Int) typ_stack); unlazy (gen_cc target (T Int :: typ_stack))]
         (fun (src_a, src_b) (body_a, body_b) ->
           let uid = Uid.fresh () in
@@ -297,8 +308,8 @@ and gen_t
 = fun target typ_stack ->
   lazy (
     choose (
-      unlazy (gen_t' target typ_stack)
-      :: gen_value (T target) typ_stack
+      unlazy (gen_t' target typ_stack)          (* Generate a CC, then convert it to an [Incr.t] *)
+      :: gen_value (T target) typ_stack         (* Pick an [Incr.t] from the stack *)
     )
   )
 
@@ -306,7 +317,7 @@ and gen_t'
 : type a b sa sb. (a, b, sa, sb, a Incr.t, b Id.t) generator
 = fun target typ_stack ->
   lazy (
-    map [unlazy (gen_cc target typ_stack)]
+    map [unlazy (gen_cc target typ_stack)]      (* Pick an [Incr.cc] from the stack and convert to [Incr.t] *)
       (fun (a, b) ->
         let uid = Uid.fresh () in
         (fun s -> Incr.of_cc (a s)),
@@ -323,6 +334,7 @@ let typ_stack = Type.[ T Int; T Int; T Int ]
 let () =
   Crowbar.add_test Crowbar.[ gen_t typ_stack ] @@ fun (incr_eval, id_eval) ->
 
+    (* Initialise with three constants available for use *)
     let id0, id1, id2 = Uid.fresh (), Uid.fresh (), Uid.fresh () in
 
     let v0 = Incr.var 666666 in
@@ -332,6 +344,7 @@ let () =
 
     let id_stack0 = (Id.T (id0, 666666), (Id.T (id1, 111111), (Id.T (id2, 424242), ()))) in
 
+    (* Perform the initial evaluations *)
     assert (Trace.grab_log () = []) ;
     let Id.T (_, r0) = id_eval id_stack0 in
     let trace0 = Trace.grab_log () in
