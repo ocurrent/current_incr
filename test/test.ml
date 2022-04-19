@@ -73,6 +73,29 @@ let test_eq () =
   propagate ();
   Alcotest.(check int) "No more eval" 3 !i
 
+(* Check that we stop propagating changes when a custom equality function is used. *)
+let test_map_eq () =
+  let i = ref 0 in
+  let x = var "Hello" in
+  let eq x_old x_new =
+    String.equal
+      (String.uppercase_ascii x_old)
+      (String.uppercase_ascii x_new) in
+  let y = map ~eq (fun x -> x) (of_var x) in
+  let z = map (fun _ -> incr i; !i) y in
+  Alcotest.(check int) "Initial run" 1 @@ observe z;
+  change x "world";
+  propagate ();
+  Alcotest.(check int) "Did propagate" 2 @@ observe z;
+  change x "WORLD";
+  propagate ();
+  Alcotest.(check int) "Did cut off" 2 @@ observe z;
+  change x "";
+  propagate ();
+  Alcotest.(check int) "Did propagate again" 3 @@ observe z;
+  change x "";   (* Stop [x] from being GC'd before here *)
+  propagate ()
+
 (* Check we can cope with the second evaluation creating extra time-points. *)
 let test_expand () =
   let x = var 0 in
@@ -247,6 +270,7 @@ let () =
       Alcotest.test_case  "simple"   `Quick test_simple;
       Alcotest.test_case  "release"  `Quick test_release;
       Alcotest.test_case  "eq"       `Quick test_eq;
+      Alcotest.test_case  "map eq"   `Quick test_map_eq;
       Alcotest.test_case  "expand"   `Quick test_expand;
       Alcotest.test_case  "nested"   `Quick test_nested;
       Alcotest.test_case  "separate" `Quick test_separate;
