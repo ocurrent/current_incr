@@ -105,3 +105,35 @@ Current_incr's API is pretty small. You might want to wrap it to provide extra f
 
 If you need that, consider using the [OCurrent](https://github.com/ocurrent/ocurrent) library,
 which extends current_incr with these features.
+
+## Contributing
+
+You will need to run `dune runtest` to validate your changes. A more extensive verification is provided with [`crowbar`](https://github.com/stedolan/crowbar) to generate arbitrary computations and check their behavior and results. This step requires [`afl-fuzz`](https://lcamtuf.coredump.cx/afl/) and an ocaml compiler with the `+afl` option enabled, for example:
+
+```shell
+$ opam switch create 4.12.1-afl --packages=ocaml-variants.4.12.1+options,ocaml-option-afl --repos=default,beta
+```
+
+Before running the tests, `afl-fuzz` requires an `input/` folder with some initial random data:
+
+```shell
+$ mkdir input
+$ head -c 512 /dev/urandom > input/rnd
+```
+
+We recommend leaving `afl-fuzz` running for hours before concluding that your patch is fine:
+
+```shell
+$ dune build test/exhaust.exe
+$ afl-fuzz -m 500 -i input -o output _build/default/test/exhaust.exe @@
+```
+
+Any issue will be reported in the `output/crashes/` folder. The crashing test cases can then be reproduced with:
+
+```shell
+$ ./_build/default/test/exhaust.exe -i ./output/crashes/id:000000,...
+
+$ find output/crashes/ -name 'id:*' -exec ./_build/default/test/exhaust.exe -i '{}' ';'
+```
+
+Note that the fuzzer may report crashes due to memory consumption or a bad input file (*"testcase was invalid: premature end of file"*), which aren't indicative of an issue with your changes.
