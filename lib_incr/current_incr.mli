@@ -51,7 +51,7 @@ val on_release : (unit -> unit) -> unit
     Note that the order in which multiple such functions are called is somewhat
     unpredictable. *)
 
-val map : ('a -> 'b) -> 'a t -> 'b t
+val map : ?eq:('b -> 'b -> bool) -> ('a -> 'b) -> 'a t -> 'b t
 (** A convenience function to read a value, apply a function to it, and write the result. *)
 
 module Separate (Map : Map.S) : sig
