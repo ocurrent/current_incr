@@ -19,7 +19,7 @@
 
 (** {2 Changeable values} *)
 
-type 'a t
+type !'a t
 (** An ['a t] holds a value of type ['a], which will update as necessary. *)
 
 val const : 'a -> 'a t
@@ -27,7 +27,7 @@ val const : 'a -> 'a t
 
 (** {2 Changeable computations} *)
 
-type 'a cc
+type !'a cc
 (** An ['a cc] is a changeable computation that can be run to get a value of type ['a].
     Internally, it is a function that takes a destination variable, reads zero or more
     other changeable values, and then updates the destination. *)
@@ -67,7 +67,7 @@ end
 
     These functions are used to interface between the changeable system and other systems (e.g. Lwt). *)
 
-type 'a var
+type !'a var
 (** A mutable value that can be changed using [change]. Internally, [type 'a var = 'a t],
     but it's useful to distinguish between values that are inputs to the system and
     values that only change in response to computations being rerun. *)

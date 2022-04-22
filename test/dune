@@ -1,4 +1,4 @@
 (tests
- (names test)
+ (names test exhaust)
  (package current_incr)
- (libraries current_incr alcotest))
+ (libraries current_incr alcotest crowbar))
