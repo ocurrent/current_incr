@@ -1,4 +1,4 @@
-* [Current_incr API docs](https://ocurrent.github.io/ocurrent/current_incr/Current_incr/index.html)
+* [Current_incr API docs](https://ocurrent.github.io/current_incr/current_incr/Current_incr/index.html)
 
 ## Current_incr - Self-adjusting computations
 
