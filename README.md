@@ -1,4 +1,8 @@
+[![docs][docs-shield]][docs]
+[![OCaml-CI Build Status][ocaml-ci-shield]][ocaml-ci]
+
 * [Current_incr API docs](https://ocurrent.github.io/current_incr/current_incr/Current_incr/index.html)
+
 
 ## Current_incr - Self-adjusting computations
 
@@ -137,3 +141,9 @@ $ find output/crashes/ -name 'id:*' -exec ./_build/default/test/exhaust.exe -i '
 ```
 
 Note that the fuzzer may report crashes due to memory consumption or a bad input file (*"testcase was invalid: premature end of file"*), which aren't indicative of an issue with your changes.
+
+[docs-shield]:https://img.shields.io/badge/doc-online-blue.svg
+[docs]: https://ocurrent.github.io/current_incr/
+
+[ocaml-ci]: https://ci.ocamllabs.io/github/ocurrent/current_incr
+[ocaml-ci-shield]: https://img.shields.io/endpoint?url=https%3A%2F%2Fci.ocamllabs.io%2Fbadge%2Focurrent%2Fcurrent_incr%2Fmaster&logo=ocaml
