@@ -1,9 +1,6 @@
 [![docs][docs-shield]][docs]
 [![OCaml-CI Build Status][ocaml-ci-shield]][ocaml-ci]
 
-* [Current_incr API docs](https://ocurrent.github.io/current_incr/current_incr/Current_incr/index.html)
-
-
 ## Current_incr - Self-adjusting computations
 
 This is a small, self-contained library for self-adjusting (incremental) computations.
