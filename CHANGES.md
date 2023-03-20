@@ -1,3 +1,6 @@
+## dev
+
+ * Adopt the OCaml Code of Conduct (@tmcgilchrist)
 
 ## 0.6.1 (2022-10-25)
 
